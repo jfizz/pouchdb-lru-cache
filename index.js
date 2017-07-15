@@ -142,12 +142,15 @@ function getLeastRecentlyUsed(mainDoc, lastUsedDoc) {
   return minDigest;
 }
 
-function putBinary(db, key, blob, type) {
+function putBinary(db, key, blob) {
   return getMainDoc(db).then(function (mainDoc) {
     if (mainDoc._attachments[key]) {
       return; // already stored
     }
-    return db.putAttachment(MAIN_DOC_ID, key, mainDoc._rev, blob, type);
+    return db.put({
+      _id: key,
+      value: blob,
+    });
   });
 }
 
@@ -156,7 +159,7 @@ function updateLastUsed(db, key, time, maxSize) {
     var mainDoc = docs[0];
     var lastUsedDoc = docs[1];
 
-    var digest = mainDoc._attachments[key].digest;
+    var digest = key;
     lastUsedDoc.lastUsed[digest] = time;
 
     var totalSize = calculateTotalSize(mainDoc);
@@ -200,16 +203,12 @@ exports.initLru = function (maxSize) {
    * put
    */
 
-  api.put = function (rawKey, blob, type) {
+  api.put = function (rawKey, blob) {
     var key = encodeKey(rawKey);
     var time = Date.now();
 
-    return Promise.resolve().then(function () {
-      if (!type) {
-        throw new Error('need to specify a content-type');
-      }
-    }).then(synchronous(function () {
-      return putBinary(db, key, blob, type);
+    return Promise.resolve().then(synchronous(function () {
+      return putBinary(db, key, blob);
     })).then(synchronous(function () {
       return updateLastUsed(db, key, time, maxSize);
     })).then(function () {
@@ -223,7 +222,7 @@ exports.initLru = function (maxSize) {
   api.peek = function (rawKey) {
     var key = encodeKey(rawKey);
 
-    return db.getAttachment(MAIN_DOC_ID, key);
+    return db.get(key);
   };
 
   /**
@@ -260,7 +259,7 @@ exports.initLru = function (maxSize) {
         }
       });
     })).then(function () {
-      return db.getAttachment(MAIN_DOC_ID, key);
+      return db.get(key);
     });
   };
 
